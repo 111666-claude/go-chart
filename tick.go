@@ -111,5 +111,18 @@ func GenerateContinuousTicks(r Renderer, ra Range, isVertical bool, style Style,
 		})
 	}
 
+	// if the range hides intervals (i.e. an axis break), do not
+	// generate ticks within the hidden intervals; the remaining
+	// ticks continue to display their real (uncompressed) values.
+	if bp, isBroken := ra.(BreaksProvider); isBroken {
+		var visible []Tick
+		for _, t := range ticks {
+			if !bp.IsHidden(t.Value) {
+				visible = append(visible, t)
+			}
+		}
+		ticks = visible
+	}
+
 	return ticks
 }

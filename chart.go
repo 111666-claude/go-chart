@@ -299,6 +299,18 @@ func (c Chart) getRanges() (xrange, yrange, yrangeAlt Range) {
 		}
 	}
 
+	if len(c.XAxis.Breaks) > 0 {
+		if _, isBrokenRange := xrange.(*BrokenRange); !isBrokenRange {
+			xrange = &BrokenRange{
+				Min:        xrange.GetMin(),
+				Max:        xrange.GetMax(),
+				Domain:     xrange.GetDomain(),
+				Descending: xrange.IsDescending(),
+				Breaks:     c.XAxis.Breaks,
+			}
+		}
+	}
+
 	return
 }
 

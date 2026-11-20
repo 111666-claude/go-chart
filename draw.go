@@ -17,6 +17,11 @@ func (d draw) LineSeries(r Renderer, canvasBox Box, xrange, yrange Range, style 
 		return
 	}
 
+	if bp, isBroken := xrange.(BreaksProvider); isBroken {
+		d.lineSeriesWithBreaks(r, canvasBox, xrange, yrange, style, vs, bp)
+		return
+	}
+
 	cb := canvasBox.Bottom
 	cl := canvasBox.Left
 
@@ -65,6 +70,93 @@ func (d draw) LineSeries(r Renderer, canvasBox Box, xrange, yrange Range, style 
 			vx, vy = vs.GetValues(i)
 			x = cl + xrange.Translate(vx)
 			y = cb - yrange.Translate(vy)
+
+			dotWidth := defaultDotWidth
+			if style.DotWidthProvider != nil {
+				dotWidth = style.DotWidthProvider(xrange, yrange, i, vx, vy)
+			}
+
+			if style.DotColorProvider != nil {
+				dotColor := style.DotColorProvider(xrange, yrange, i, vx, vy)
+
+				r.SetFillColor(dotColor)
+				r.SetStrokeColor(dotColor)
+			}
+
+			r.Circle(dotWidth, x, y)
+			r.FillStroke()
+		}
+	}
+}
+
+// lineSeriesWithBreaks draws a line series over a range that hides
+// intervals (see BrokenRange). The line is never connected across a
+// hidden interval; each contiguous run of points is stroked (and
+// filled) as its own segment. Points inside hidden intervals are
+// projected onto the nearest break edge by the range's Translate.
+func (d draw) lineSeriesWithBreaks(r Renderer, canvasBox Box, xrange, yrange Range, style Style, vs ValuesProvider, bp BreaksProvider) {
+	cb := canvasBox.Bottom
+	cl := canvasBox.Left
+
+	yv0 := yrange.Translate(0)
+
+	// partition point indexes into segments that do not cross a break.
+	type segment struct{ start, end int }
+	segments := []segment{{0, 0}}
+	prevX, _ := vs.GetValues(0)
+	for i := 1; i < vs.Len(); i++ {
+		vx, _ := vs.GetValues(i)
+		if bp.HasBreakBetween(prevX, vx) {
+			segments = append(segments, segment{i, i})
+		} else {
+			segments[len(segments)-1].end = i
+		}
+		prevX = vx
+	}
+
+	if style.ShouldDrawStroke() && style.ShouldDrawFill() {
+		style.GetFillOptions().WriteDrawingOptionsToRenderer(r)
+		for _, seg := range segments {
+			v0x, v0y := vs.GetValues(seg.start)
+			x0 := cl + xrange.Translate(v0x)
+			y0 := cb - yrange.Translate(v0y)
+
+			x, y := x0, y0
+			r.MoveTo(x0, y0)
+			for i := seg.start + 1; i <= seg.end; i++ {
+				vx, vy := vs.GetValues(i)
+				x = cl + xrange.Translate(vx)
+				y = cb - yrange.Translate(vy)
+				r.LineTo(x, y)
+			}
+			r.LineTo(x, MinInt(cb, cb-yv0))
+			r.LineTo(x0, MinInt(cb, cb-yv0))
+			r.LineTo(x0, y0)
+			r.Fill()
+		}
+	}
+
+	if style.ShouldDrawStroke() {
+		style.GetStrokeOptions().WriteDrawingOptionsToRenderer(r)
+		for _, seg := range segments {
+			v0x, v0y := vs.GetValues(seg.start)
+			r.MoveTo(cl+xrange.Translate(v0x), cb-yrange.Translate(v0y))
+			for i := seg.start + 1; i <= seg.end; i++ {
+				vx, vy := vs.GetValues(i)
+				r.LineTo(cl+xrange.Translate(vx), cb-yrange.Translate(vy))
+			}
+		}
+		r.Stroke()
+	}
+
+	if style.ShouldDrawDot() {
+		defaultDotWidth := style.GetDotWidth()
+
+		style.GetDotOptions().WriteDrawingOptionsToRenderer(r)
+		for i := 0; i < vs.Len(); i++ {
+			vx, vy := vs.GetValues(i)
+			x := cl + xrange.Translate(vx)
+			y := cb - yrange.Translate(vy)
 
 			dotWidth := defaultDotWidth
 			if style.DotWidthProvider != nil {

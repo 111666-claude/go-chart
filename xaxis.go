@@ -20,6 +20,13 @@ type XAxis struct {
 	ValueFormatter ValueFormatter
 	Range          Range
 
+	// Breaks are hidden intervals on the axis, each rendered as a
+	// fixed pixel width gap. Line series are not connected across a
+	// break, and generated ticks within a break are omitted while
+	// remaining ticks keep their real values. If Range is already a
+	// *BrokenRange, its own breaks are used instead.
+	Breaks []AxisBreak
+
 	TickStyle    Style
 	Ticks        []Tick
 	TickPosition TickPosition
